@@ -1,0 +1,7 @@
+---
+title: "Heart Disease Prediction"
+subtitle: "STATS 202: Data Mining and Analysis"
+author: "Alex Kim"
+output: html_notebook
+---
+
