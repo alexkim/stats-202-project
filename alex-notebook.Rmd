@@ -7,6 +7,7 @@ subtitle: 'Stats 202: Data Mining and Analysis'
 ```{R message=FALSE}
 library(tidyverse)
 library(glmnet)
+library(MASS)
 ```
 
 ***
@@ -14,8 +15,14 @@ library(glmnet)
 # Importing the Data
 
 ```{R message=FALSE}
+# Initial import
 train_data <- read_csv("data/train_data.csv")
 test_data <- read_csv("data/test_data.csv")
+
+# Remove ID's; create ID vector for test
+train_data <- train_data[-12]
+test_ids <- as.vector(test_data$Id)
+test_data <- test_data[-11]
 ```
 
  * **train_data** contains all predictors and the outcome variable "Status."
@@ -30,6 +37,7 @@ test_data <- read_csv("data/test_data.csv")
 ```{R}
 dim(train_data)
 ```
+
 ### Variance
 
 Variance for every column except ID
@@ -44,9 +52,11 @@ apply(train_data, 2, var)
 
 ### Subtraining and Subtest Datasets
 
-The file *test_data.csv* does not contain response variables; therefore, we cannot use it to evaluate the error of our models. We instead divide the training dataset into a "subtraining" and "subtest" set to allow us to evaluate the error of our models.
+The file *test_data.csv* does not contain response variables; therefore, we cannot use it to evaluate the error of our models. We instead divide the training dataset into a "subtraining" and "subtest" set to allow us to evaluate the error of our models. We follow an 80:20 subtraining:subtest split.
 
 ```{R}
+set.seed(1)
+
 subtrain_size <- floor(0.8 * nrow(train_data))
 subtrain_indexes <- sample(x = 1:nrow(train_data), size = subtrain_size)
 
@@ -60,12 +70,11 @@ rm(subtrain_size, subtrain_indexes)
 
 # Logistic Regression
 
-
 ### Standard
 
 #### Pre-Evaluation
 
-MSE: **0.37**
+Error: **0.6**
 
 ```{R}
 # Train a logistic regression model
@@ -76,8 +85,12 @@ prob_predictions <- predict(lreg, subtest[,-11], type = "response")
 binary_predictions <- if_else(prob_predictions >= 0.5, TRUE, FALSE)
 
 # Evaluate error of subtest predictions
-true_responses <- subtest[,11]
-mse <- mean((binary_predictions - true_responses)^2)
+true_responses <- subtest$Status
+error <- mean(binary_predictions == true_responses)
+error
+
+# Clean up extraneous variables
+rm(lreg, true_responses, binary_predictions, prob_predictions)
 ```
 
 #### Kaggle
@@ -93,7 +106,7 @@ prob_predictions <- predict(lreg, test_data, type = "response")
 binary_predictions <- if_else(prob_predictions >= 0.5, TRUE, FALSE)
 
 # Create an output CSV containing ID and predicted status
-output <- tibble(Id = test_data$Id, Category = binary_predictions)
+output <- tibble(Id = test_ids, Category = binary_predictions)
 write_csv(output, "data/submission.csv")
 ```
 
@@ -101,11 +114,11 @@ write_csv(output, "data/submission.csv")
 
 #### Pre-Evaluation
 
-MSE: **0.37**
+Error: **0.61**
 
 ```{R}
 # Train a logistic regression model
-predictors <- as.matrix(subtrain[,-c(11, 12)])
+predictors <- as.matrix(subtrain[,-11])
 response <- as.matrix(subtrain[,11])
 
 ridge_lreg <- cv.glmnet(predictors, response, alpha = 0)
@@ -114,12 +127,13 @@ optimal_lambda <- ridge_lreg$lambda.min
 optimal_ridge_lreg <- glmnet(predictors, response, alpha = 0, lambda = optimal_lambda)
 
 # Predict the response on the test dataset
-prob_predictions <- predict(optimal_ridge_lreg, s = optimal_lambda, newx = as.matrix(subtest[,-c(11, 12)]))
+prob_predictions <- predict(optimal_ridge_lreg, s = optimal_lambda, newx = as.matrix(subtest[,-11]))
 binary_predictions <- if_else(prob_predictions >= 0.5, TRUE, FALSE)
 
-# Create an output CSV containing ID and predicted status
-true_responses <- subtest[,11]
-mse <- mean((binary_predictions - true_responses)^2)
+# Evaluate error of subtest predictions
+true_responses <- subtest$Status
+error <- mean(binary_predictions == true_responses)
+error
 ```
 
 #### Kaggle
@@ -128,7 +142,7 @@ Kaggle Score: **0.66666**
 
 ```{R}
 # Train a logistic regression model
-predictors <- as.matrix(train_data[,-c(11, 12)])
+predictors <- as.matrix(train_data[,-11])
 response <- as.matrix(train_data[,11])
 
 ridge_lreg <- cv.glmnet(predictors, response, alpha = 0)
@@ -137,10 +151,71 @@ optimal_lambda <- ridge_lreg$lambda.min
 optimal_ridge_lreg <- glmnet(predictors, response, alpha = 0, lambda = optimal_lambda)
 
 # Predict the response on the test dataset
-prob_predictions <- predict(optimal_ridge_lreg, s = optimal_lambda, newx = as.matrix(test_data[,-11]))
+prob_predictions <- predict(optimal_ridge_lreg, s = optimal_lambda, newx = as.matrix(test_data))
 binary_predictions <- if_else(prob_predictions >= 0.5, TRUE, FALSE)
 
 # Create an output CSV containing ID and predicted status
-output <- tibble(Id = test_data$Id, Category = binary_predictions)
+output <- tibble(Id = test_ids, Category = binary_predictions)
 write_csv(output, "data/submission.csv")
 ```
+
+***
+
+# Linear Discriminant Analysis
+
+### Pre-Evaluation
+
+Error: 0.6
+
+```{R}
+# Train a LDA model
+lda_model <- lda(Status ~ ., data = subtrain)
+
+# Predict the response on the test dataset
+predictions <- predict(lda_model, subtest)$class
+
+# Evaluate the error
+true_responses <- as.list(subtest$Status)
+error <- mean(predictions == true_responses)
+error
+```
+
+# Quadratic Discriminant Analysis
+
+### Pre-Evaluation
+
+Mean Accuracy: 0.67
+
+```{R}
+# Train a QDA model
+qda_model <- qda(Status ~ ., data = subtrain)
+
+# Predict the response on the test dataset
+predictions <- predict(qda_model, subtest)$class
+
+# Evaluate the error
+true_responses <- as.list(subtest$Status)
+error <- mean(predictions == true_responses)
+error
+```
+
+### Kaggle
+
+```{R}
+# Train a QDA model
+qda_model <- qda(Status ~ ., data = train_data)
+
+# Predict the response on the test dataset
+predictions <- predict(qda_model, test_data)$class
+predictions <- if_else(predictions == 1, TRUE, FALSE)
+
+# Create an output CSV containing ID and predicted status
+output <- tibble(Id = test_ids, Category = predictions)
+write_csv(output, "data/submission.csv")
+```
+
+***
+
+# K-Nearest Neighbors
+
+### 

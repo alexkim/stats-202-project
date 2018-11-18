@@ -2,6 +2,5 @@
 title: "Heart Disease Prediction"
 subtitle: "Stats 202: Data Mining and Analysis"
 author: "Suraj Bulchand"
-output: html_notebook
 ---
 
