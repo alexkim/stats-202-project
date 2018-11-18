@@ -1,0 +1,7 @@
+---
+title: "Heart Disease Prediction"
+subtitle: "Stats 202: Data Mining and Analysis"
+author: "Carina Zhang"
+output: html_notebook
+---
+
