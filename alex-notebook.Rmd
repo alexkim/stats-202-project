@@ -1,7 +1,146 @@
 ---
 title: "Heart Disease Prediction"
-subtitle: "Stats 202: Data Mining and Analysis"
 author: "Alex Kim"
-output: html_notebook
+subtitle: 'Stats 202: Data Mining and Analysis'
 ---
 
+```{R message=FALSE}
+library(tidyverse)
+library(glmnet)
+```
+
+***
+
+# Importing the Data
+
+```{R message=FALSE}
+train_data <- read_csv("data/train_data.csv")
+test_data <- read_csv("data/test_data.csv")
+```
+
+ * **train_data** contains all predictors and the outcome variable "Status."
+ * **test_data** contains only the predictors.
+
+***
+
+# Summary Statistics
+
+### Dimensions
+
+```{R}
+dim(train_data)
+```
+### Variance
+
+Variance for every column except ID
+
+```{R}
+apply(train_data, 2, var)
+```
+
+***
+
+# Data Preparation
+
+### Subtraining and Subtest Datasets
+
+The file *test_data.csv* does not contain response variables; therefore, we cannot use it to evaluate the error of our models. We instead divide the training dataset into a "subtraining" and "subtest" set to allow us to evaluate the error of our models.
+
+```{R}
+subtrain_size <- floor(0.8 * nrow(train_data))
+subtrain_indexes <- sample(x = 1:nrow(train_data), size = subtrain_size)
+
+subtrain <- train_data[subtrain_indexes,]
+subtest <- train_data[-subtrain_indexes,]
+
+rm(subtrain_size, subtrain_indexes)
+```
+
+***
+
+# Logistic Regression
+
+
+### Standard
+
+#### Pre-Evaluation
+
+MSE: **0.37**
+
+```{R}
+# Train a logistic regression model
+lreg <- glm(formula = Status ~ ., data = subtrain, family = binomial)
+
+# Predict the response on the test dataset
+prob_predictions <- predict(lreg, subtest[,-11], type = "response")
+binary_predictions <- if_else(prob_predictions >= 0.5, TRUE, FALSE)
+
+# Evaluate error of subtest predictions
+true_responses <- subtest[,11]
+mse <- mean((binary_predictions - true_responses)^2)
+```
+
+#### Kaggle
+
+Kaggle Score: **0.65000**
+
+```{R}
+# Train a logistic regression model
+lreg <- glm(formula = Status ~ ., data = train_data, family = binomial)
+
+# Predict the response on the test dataset
+prob_predictions <- predict(lreg, test_data, type = "response")
+binary_predictions <- if_else(prob_predictions >= 0.5, TRUE, FALSE)
+
+# Create an output CSV containing ID and predicted status
+output <- tibble(Id = test_data$Id, Category = binary_predictions)
+write_csv(output, "data/submission.csv")
+```
+
+### Ridge Regularization
+
+#### Pre-Evaluation
+
+MSE: **0.37**
+
+```{R}
+# Train a logistic regression model
+predictors <- as.matrix(subtrain[,-c(11, 12)])
+response <- as.matrix(subtrain[,11])
+
+ridge_lreg <- cv.glmnet(predictors, response, alpha = 0)
+optimal_lambda <- ridge_lreg$lambda.min
+
+optimal_ridge_lreg <- glmnet(predictors, response, alpha = 0, lambda = optimal_lambda)
+
+# Predict the response on the test dataset
+prob_predictions <- predict(optimal_ridge_lreg, s = optimal_lambda, newx = as.matrix(subtest[,-c(11, 12)]))
+binary_predictions <- if_else(prob_predictions >= 0.5, TRUE, FALSE)
+
+# Create an output CSV containing ID and predicted status
+true_responses <- subtest[,11]
+mse <- mean((binary_predictions - true_responses)^2)
+```
+
+#### Kaggle
+
+Kaggle Score: **0.66666**
+
+```{R}
+# Train a logistic regression model
+predictors <- as.matrix(train_data[,-c(11, 12)])
+response <- as.matrix(train_data[,11])
+
+ridge_lreg <- cv.glmnet(predictors, response, alpha = 0)
+optimal_lambda <- ridge_lreg$lambda.min
+
+optimal_ridge_lreg <- glmnet(predictors, response, alpha = 0, lambda = optimal_lambda)
+
+# Predict the response on the test dataset
+prob_predictions <- predict(optimal_ridge_lreg, s = optimal_lambda, newx = as.matrix(test_data[,-11]))
+binary_predictions <- if_else(prob_predictions >= 0.5, TRUE, FALSE)
+
+# Create an output CSV containing ID and predicted status
+output <- tibble(Id = test_data$Id, Category = binary_predictions)
+write_csv(output, "data/submission.csv")
+```
