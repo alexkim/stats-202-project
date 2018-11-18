@@ -1,5 +1,5 @@
 # HTML R Notebook
-*.nb.html 
+*.html 
 
 # Data files
 data/
