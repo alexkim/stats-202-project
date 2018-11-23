@@ -6,8 +6,9 @@ subtitle: 'Stats 202: Data Mining and Analysis'
 
 ```{R message=FALSE}
 library(tidyverse)
-library(glmnet)
-library(MASS)
+library(glmnet)  # logistic regression (glm)
+library(MASS)  # LDA, QDA
+library(class)  # KNN
 ```
 
 ***
@@ -44,6 +45,20 @@ Variance for every column except ID
 
 ```{R}
 apply(train_data, 2, var)
+```
+
+### Outcome Totals
+
+```{R}
+sum(train_data$Status)
+nrow(train_data) - sum(train_data$Status)
+```
+
+### PCA
+
+```{R}
+obs_pc <- prcomp(train_data[,-11])$x[,c(1,2)]
+plot(obs_pc, col = train_data$Status + 1)
 ```
 
 ***
@@ -182,13 +197,50 @@ error
 
 # Quadratic Discriminant Analysis
 
-### Pre-Evaluation
+### Pre-Evaluation 1: Baseline
 
 Mean Accuracy: 0.67
 
 ```{R}
 # Train a QDA model
 qda_model <- qda(Status ~ ., data = subtrain)
+
+# Predict the response on the test dataset
+predictions <- predict(qda_model, subtest)$class
+
+# Evaluate the error
+true_responses <- as.list(subtest$Status)
+error <- mean(predictions == true_responses)
+error
+```
+
+### Pre-Evaluation 2: 
+
+ * Center data and standardize variance to 1 (no significant difference in result)
+ * QDA, try different probability thresholds
+ * Try different combinations of predictors
+ * **Don't use this predictor for Kaggle submission** unless Kaggle submission is scaled first
+
+```{R}
+# See p-values of logistic regression predictors
+lreg <- glm(formula = Status ~ ., data = subtrain, family = binomial)
+summary(lreg)
+```
+
+```{R}
+# Scale all predictors in subtest and subtrain
+subtrain_status <- subtrain$Status
+subtest_status <- subtest$Status
+
+subtrain <- as_tibble(scale(subtrain))
+subtest <- as_tibble(scale(subtest))
+
+subtrain <- mutate(subtrain, Status = subtrain_status)
+subtest <- mutate(subtest, Status = subtest_status)
+
+# Train a QDA model
+#qda_model <- qda(Status ~ ., data = subtrain)
+qda_model <- qda(Status ~ age + assay, data = subtrain)
 
 # Predict the response on the test dataset
 predictions <- predict(qda_model, subtest)$class
@@ -218,4 +270,40 @@ write_csv(output, "data/submission.csv")
 
 # K-Nearest Neighbors
 
-### 
+### Pre-Evaluation
+
+```{R}
+set.seed(1)
+
+# Train a KNN model
+train_predictors <- as.matrix(subtrain[,-11])
+train_response <- as.matrix(subtrain[,11])
+test_predictors <- as.matrix(subtest[,-11])
+
+predictions <- knn(train_predictors, test_predictors, train_response, k = 20)
+
+true_responses <- as.list(subtest$Status)
+mean(predictions == true_responses)
+```
+
+# Support Vector Machine
+
+### Pre-Evaluation
+
+```{R}
+set.seed(1)
+dat <- data.frame(x = as.matrix(subtrain[,-11]), y = as.factor(subtrain$Status))
+
+library(e1071)
+svmfit <- svm(y ~ ., data = dat, kernel = "linear", cost = 10, scale = FALSE)
+
+tune_out <- tune(svm, y ~ ., data = dat, kernel = "linear",
+                 ranges = list(cost = c(0.001, 0.01, 0.1, 1, 5, 10, 100)))
+
+bestmod <- summary(tune_out)$best.model
+
+dat_test <- data.frame(x = as.matrix(subtest[,-11]), y = as.factor(subtest$Status))
+ypred <- predict(bestmod, dat_test)
+
+accuracy <- mean(ypred == dat_test$y)
+```
