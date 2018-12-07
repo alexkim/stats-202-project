@@ -46,14 +46,14 @@ rm(subtrain_size, subtrain_indexes)
 
 ***
 
-# Classification Tree
+# Simple Classification Tree
 
 ```{R}
 simple_tree <- tree(Status ~ ., data = subtrain)
 summary(simple_tree)
 
 predictions <- predict(simple_tree, subtest, type = "class")
-mean(predictions == subtest$Status)
+mean(predictions != subtest$Status)  # Average error
 ```
 
 # Cross Validated Pruning
@@ -72,7 +72,7 @@ cv_tree$size[which.min(cv_tree$dev)]
 pruned_tree <- prune.misclass(simple_tree, best = 5)
 
 predictions <- predict(pruned_tree, subtest, type = "class")
-mean(predictions == subtest$Status)
+mean(predictions != subtest$Status)  # Average error
 ```
 
 # Bagging
@@ -82,15 +82,35 @@ num_predictors <- ncol(subtrain) - 1
 bagging_trees <- randomForest(Status ~ ., data = subtrain, mtry =  num_predictors, importance = TRUE)
 
 predictions <- predict(bagging_trees, subtest, type = "class")
-mean(predictions == subtest$Status)
+mean(predictions != subtest$Status)
 ```
 
 # Random Forest
 
+***mtry* = 2** generally seems to perform well.
+
 ```{R}
 num_predictors <- ncol(subtrain) - 1
-bagging_trees <- randomForest(Status ~ ., data = subtrain, mtry =  sqrt(num_predictors), importance = TRUE)
+error_values <- tibble(m = integer(), error = double())
 
-predictions <- predict(bagging_trees, subtest, type = "class")
-mean(predictions == subtest$Status)
+for(m in 1:num_predictors) {
+  rf <- randomForest(Status ~ ., data = subtrain, mtry =  m, importance = TRUE)
+
+  predictions <- predict(rf, subtest, type = "class")
+  error <- mean(predictions != subtest$Status)
+  
+  error_values <- add_row(error_values, m = m, error = error)
+}
+
+plot(x = error_values$m, y = error_values$error, type = "b")
 ```
+
+```{R}
+rf <- randomForest(Status ~ ., data = subtrain, mtry =  2, importance = TRUE)
+
+predictions <- predict(rf, subtest, type = "class")
+error <- mean(predictions != subtest$Status)
+
+error
+```
+
