@@ -1,0 +1,96 @@
+---
+title: "Heart Disease Prediction"
+subtitle: "Tree-Based Methods"
+author: "Alex Kim"
+date: "December 6, 2018"
+subtitle: 'Stats 202: Data Mining and Analysis'
+---
+
+```{R message=FALSE}
+library(tidyverse)
+library(tree)
+library(randomForest)
+```
+
+***
+
+# Importing the Data
+
+```{R message=FALSE}
+# Initial import
+train_data <- read_csv("data/train_data.csv")
+test_data <- read_csv("data/test_data.csv")
+
+# Remove ID's; create ID vector for test
+train_data <- train_data[-12]
+test_ids <- as.vector(test_data$Id)
+test_data <- test_data[-11]
+
+# Modify "Status" response variable format
+train_data <- mutate(train_data, Status = as.factor(if_else(Status == 1, "Y", "N")))
+```
+
+# Subtraining and Subtest Datasets
+
+```{R}
+set.seed(1)
+
+subtrain_size <- floor(0.8 * nrow(train_data))
+subtrain_indexes <- sample(x = 1:nrow(train_data), size = subtrain_size)
+
+subtrain <- train_data[subtrain_indexes,]
+subtest <- train_data[-subtrain_indexes,]
+
+rm(subtrain_size, subtrain_indexes)
+```
+
+***
+
+# Classification Tree
+
+```{R}
+simple_tree <- tree(Status ~ ., data = subtrain)
+summary(simple_tree)
+
+predictions <- predict(simple_tree, subtest, type = "class")
+mean(predictions == subtest$Status)
+```
+
+# Cross Validated Pruning
+
+**Tree size 5** is optimal after several CV runs
+
+```{R}
+cv_tree <- cv.tree(simple_tree, FUN = prune.misclass)
+cv_tree$size[which.min(cv_tree$dev)]
+
+# Plot CV error vs tree size
+# plot(cv_tree$size, cv_tree$dev, type = "b", xlab = "Tree Size", ylab = "CV Classification Error")
+```
+
+```{R}
+pruned_tree <- prune.misclass(simple_tree, best = 5)
+
+predictions <- predict(pruned_tree, subtest, type = "class")
+mean(predictions == subtest$Status)
+```
+
+# Bagging
+
+```{R}
+num_predictors <- ncol(subtrain) - 1
+bagging_trees <- randomForest(Status ~ ., data = subtrain, mtry =  num_predictors, importance = TRUE)
+
+predictions <- predict(bagging_trees, subtest, type = "class")
+mean(predictions == subtest$Status)
+```
+
+# Random Forest
+
+```{R}
+num_predictors <- ncol(subtrain) - 1
+bagging_trees <- randomForest(Status ~ ., data = subtrain, mtry =  sqrt(num_predictors), importance = TRUE)
+
+predictions <- predict(bagging_trees, subtest, type = "class")
+mean(predictions == subtest$Status)
+```
