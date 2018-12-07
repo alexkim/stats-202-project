@@ -1,0 +1,71 @@
+---
+title: "Heart Disease Prediction"
+subtitle: "Support Vector Machines"
+author: "Alex Kim"
+date: "December 6, 2018"
+---
+
+```{R message=FALSE}
+library(tidyverse)
+library(e1071)
+```
+
+***
+
+# Importing the Data
+
+```{R message=FALSE}
+# Initial import
+train_data <- read_csv("data/train_data.csv")
+test_data <- read_csv("data/test_data.csv")
+
+# Remove ID's; create ID vector for test
+train_data <- train_data[-12]
+test_ids <- as.vector(test_data$Id)
+test_data <- test_data[-11]
+
+# Modify training data
+train_data$Status <- as.factor(if_else(train_data$Status == 1, 1, -1))
+```
+
+# Subtraining and Subtest Datasets
+
+```{R}
+set.seed(1)
+
+subtrain_size <- floor(0.8 * nrow(train_data))
+subtrain_indexes <- sample(x = 1:nrow(train_data), size = subtrain_size)
+
+subtrain <- train_data[subtrain_indexes,]
+subtest <- train_data[-subtrain_indexes,]
+
+rm(subtrain_size, subtrain_indexes)
+```
+
+***
+
+# Radial SVM
+
+```{R}
+cost_range <- c(0.001, 0.01, 0.1, 1, 5, 10, 100)
+gamma_range <- c(0.1, 0.5, 1, 2, 3, 4, 10)
+
+radial_tune_output <- tune(svm, Status ~ ., data = subtrain, kernel = "radial", gamma = gamma_range, ranges = list(cost = cost_range))
+best_radial_svm <- radial_tune_output$best.model
+predictions <- predict(best_radial_svm, subtest)
+
+mean(predictions != subtest$Status)
+```
+
+# Polynomial SVM
+
+```{R}
+cost_range <- c(0.001, 0.01, 0.1, 1, 5, 10, 100)
+gamma_range <- c(0.1, 0.5, 1, 2, 3, 4, 10)
+
+poly_tune_output <- tune(svm, Status ~ ., data = subtrain, kernel = "polynomial", gamma = gamma_range, ranges = list(cost = cost_range))
+best_poly_svm <- polynomial_tune_output$best.model
+predictions <- predict(best_poly_svm, subtest)
+
+mean(predictions != subtest$Status)
+```

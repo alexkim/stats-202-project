@@ -1,0 +1,185 @@
+---
+title: "Heart Disease Prediction"
+subtitle: "Logistic Regression"
+author: "Alex Kim"
+date: "December 6, 2018"
+---
+
+```{R message=FALSE}
+library(tidyverse)
+library(glmnet)
+library(gam)
+```
+
+***
+
+# Importing the Data
+
+```{R message=FALSE}
+# Initial import
+train_data <- read_csv("data/train_data.csv")
+test_data <- read_csv("data/test_data.csv")
+
+# Remove ID's; create ID vector for test
+train_data <- train_data[-12]
+test_ids <- as.vector(test_data$Id)
+test_data <- test_data[-11]
+```
+
+# Subtraining and Subtest Datasets
+
+```{R}
+set.seed(1)
+
+subtrain_size <- floor(0.8 * nrow(train_data))
+subtrain_indexes <- sample(x = 1:nrow(train_data), size = subtrain_size)
+
+subtrain <- train_data[subtrain_indexes,]
+subtest <- train_data[-subtrain_indexes,]
+
+rm(subtrain_size, subtrain_indexes)
+```
+
+***
+
+## Standard Logistic Regression
+
+```{R}
+# Train a logistic regression model
+lreg <- glm(formula = Status ~ ., data = subtrain, family = binomial)
+
+# Predict the response on the test dataset
+probabilities <- predict(lreg, subtest, type = "response")
+predictions <- if_else(probabilities > 0.5, 1, 0)
+
+# Evaluate error of subtest predictions
+true_responses <- subtest$Status
+error <- mean(predictions != true_responses)
+error
+
+# Clean up extraneous variables
+rm(lreg, true_responses, probabilities, predictions)
+```
+
+## Ridge Regularization
+
+```{R}
+# Train a logistic regression model
+predictors <- as.matrix(subtrain[,-11])
+response <- as.matrix(subtrain[,11])
+
+ridge_lreg <- cv.glmnet(predictors, response, alpha = 0)
+optimal_lambda <- ridge_lreg$lambda.min
+
+optimal_ridge_lreg <- glmnet(predictors, response, alpha = 0, lambda = optimal_lambda)
+
+# Predict the response on the test dataset
+prob_predictions <- predict(optimal_ridge_lreg, s = optimal_lambda, newx = as.matrix(subtest[,-11]))
+binary_predictions <- if_else(prob_predictions >= 0.5, TRUE, FALSE)
+
+# Evaluate error of subtest predictions
+true_responses <- subtest$Status
+error <- mean(binary_predictions != true_responses)
+error
+```
+
+## Lasso Regularizatoin
+
+```{R}
+# Train a logistic regression model
+predictors <- as.matrix(subtrain[,-11])
+response <- as.matrix(subtrain[,11])
+
+lasso_lreg <- cv.glmnet(predictors, response, alpha = 1)
+optimal_lambda <- lasso_lreg$lambda.min
+
+optimal_lasso_lreg <- glmnet(predictors, response, alpha = 1, lambda = optimal_lambda)
+
+# Predict the response on the test dataset
+prob_predictions <- predict(optimal_lasso_lreg, s = optimal_lambda, newx = as.matrix(subtest[,-11]))
+binary_predictions <- if_else(prob_predictions >= 0.5, TRUE, FALSE)
+
+# Evaluate error of subtest predictions
+true_responses <- subtest$Status
+error <- mean(binary_predictions != true_responses)
+error
+
+optimal_lasso_lreg$beta
+```
+
+## Splines
+
+```{R}
+# Train a logistic regression model
+degree <- 2
+gam <- glm(formula = Status ~ ns(BP, degree) + ns(smoking, degree) + ns(cholesterol, degree) + ns(behavior, degree) + ns(BMI, degree) + ns(alcohol, degree) + ns(age, degree) + ns(old_assay, degree) + ns(gold_standard, degree) + ns(assay, degree), data = subtrain, family = binomial)
+
+#gam <- glm(formula = Status ~ ns(smoking, degree) + ns(behavior, degree) + ns(age, degree) + ns(old_assay, degree) + ns(gold_standard, degree) + ns(assay, degree), data = subtrain, family = binomial)
+
+# Predict the response on the test dataset
+probabilities <- predict(gam, subtest, type = "response")
+predictions <- if_else(probabilities > 0.5, 1, 0)
+
+# Evaluate error of subtest predictions
+true_responses <- subtest$Status
+error <- mean(predictions != true_responses)
+error
+
+# Clean up extraneous variables
+rm(gam, true_responses, predictions)
+```
+
+***
+
+# Interaction Terms
+
+```{R}
+set.seed(1)
+
+# Generate interaction terms
+pairwise_interactions <- Status ~ .^2
+train_data_interact <- model.matrix(pairwise_interactions, data = train_data)
+train_data_interact <- train_data_interact[,-1]
+
+# Add "Status" variable to new matrix
+train_data_interact <- cbind(train_data_interact, train_data$Status)
+colnames(train_data_interact)[ncol(train_data_interact)] <- "Status"
+
+# Break into subtrain and subtest sets
+subtrain_size <- floor(0.8 * nrow(train_data_interact))
+subtrain_indexes <- sample(x = 1:nrow(train_data_interact), size = subtrain_size)
+
+subtrain <- as.data.frame(train_data_interact[subtrain_indexes,])
+subtest <- as.data.frame(train_data_interact[-subtrain_indexes,])
+
+rm(subtrain_size, subtrain_indexes)
+```
+
+## Regular Logistic Regression
+
+```{R}
+# Train a logistic regression model
+lreg <- glm(formula = Status ~ ., data = subtrain, family = binomial)
+
+# Predict the response on the test dataset
+probabilities <- predict(lreg, subtest, type = "response")
+predictions <- if_else(probabilities > 0.5, 1, 0)
+
+# Evaluate error of subtest predictions
+true_responses <- subtest$Status
+error <- mean(predictions != true_responses)
+error
+
+# Clean up extraneous variables
+rm(lreg, true_responses, predictions)
+```
+
+## Ridge
+
+```{R}
+response_index <- ncol(subtrain)
+predictors <- subtrain[-response_index]
+response <- unlist(subtrain[response_index])
+
+cv_ridge <- cv.glmnet(Status ~ ., data = as.matrix(subtrain), alpha = 0, family = "binomial")
+```

@@ -1,0 +1,97 @@
+---
+title: "Heart Disease Prediction"
+subtitle: "Data Exploration"
+author: "Alex Kim"
+date: "December 6, 2018"
+---
+
+```{R message=FALSE}
+library(tidyverse)
+library(gam)
+```
+
+***
+
+
+# Importing the Data
+
+```{R message=FALSE}
+# Initial import
+train_data <- read_csv("data/train_data.csv")
+test_data <- read_csv("data/test_data.csv")
+
+# Remove ID's; create ID vector for test
+train_data <- train_data[-12]
+test_ids <- as.vector(test_data$Id)
+test_data <- test_data[-11]
+```
+
+ * **train_data** contains all predictors and the outcome variable "Status."
+ * **test_data** contains only the predictors.
+
+***
+
+# Summary Statistics
+
+## Dimensions
+
+```{R}
+dim(train_data)
+```
+
+## Variance
+
+Variance for every column except ID
+
+```{R}
+apply(train_data, 2, var)
+```
+
+## Outcome Totals
+
+```{R}
+sum(train_data$Status)
+nrow(train_data) - sum(train_data$Status)
+```
+
+***
+
+# Visualizations
+
+## PCA
+
+```{R}
+obs_pc <- prcomp(train_data[,-11])$x[,c(1,2)]
+plot(obs_pc, col = train_data$Status + 1)
+```
+
+## Individual Variables
+
+Predictor distributions are roughly normal
+
+```{R}
+col_range <- 1:(ncol(train_data) - 1)
+for(col in col_range) {
+  hist(unlist(train_data[col]))
+}
+```
+
+Response value seems to be very mixed along each feature axis
+
+```{R}
+col_range <- 1:(ncol(train_data) - 1)
+for(col in col_range) {
+  plot(x = unlist(train_data[col]), y = train_data$Status)
+}
+```
+
+## Interaction Terms
+
+```{R}
+pairwise_interactions <- Status ~ .^2
+train_data_interact <- model.matrix(pairwise_interactions, data = train_data)
+
+# https://stackoverflow.com/a/22649647
+```
+
+***
