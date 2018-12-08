@@ -1,0 +1,146 @@
+---
+title: "Heart Disease Prediction"
+subtitle: "Discriminant Analysis"
+author: "Alex Kim"
+date: "December 6, 2018"
+---
+
+```{R message=FALSE}
+library(tidyverse)
+library(MASS)
+```
+
+***
+
+# Data Setup
+
+## Initial Import
+
+```{R message=FALSE}
+# Initial import
+train_data <- read_csv("data/train_data.csv")
+test_data <- read_csv("data/test_data.csv")
+
+# Remove ID's; create ID vector for test
+train_data <- train_data[-12]
+test_ids <- as.vector(test_data$Id)
+test_data <- test_data[-11]
+```
+
+## OPTIONAL: Add squared predictors to data
+
+```{R}
+# Response matrix
+status <- as.matrix(train_data$Status)
+colnames(status) <- c("Status")
+
+# Predictor and squared predictor matrices
+predictors <- as.matrix(train_data[,-ncol(train_data)])
+sq_predictors <- predictors^2
+colnames(sq_predictors) <- paste(colnames(sq_predictors), "2", sep = "")
+
+# Combine above matrices
+train_data <- as.data.frame(cbind(predictors, sq_predictors, status))
+```
+
+## Subtraining and Subtest Datasets
+
+```{R}
+set.seed(1)
+
+subtrain_size <- floor(0.5 * nrow(train_data))
+subtrain_indexes <- sample(x = 1:nrow(train_data), size = subtrain_size)
+
+subtrain <- train_data[subtrain_indexes,]
+subtest <- train_data[-subtrain_indexes,]
+
+rm(subtrain_size, subtrain_indexes)
+```
+
+***
+
+# Linear Discriminant Analysis
+
+Slightly better performance when cutoff for classifying $\hat{y} = 1$ is $p(y = 1) > 0.6$.
+
+```{R}
+# Train a LDA model
+lda_model <- lda(Status ~ ., data = subtrain)
+
+# Predict the response on the test dataset using a custom probability cutoff
+p_1_cutoff <- 0.6
+posterior_p_1 <- predict(lda_model, subtest)$posterior[,2]
+predictions <- if_else(posterior_p_1 > p_1_cutoff, 1, 0)
+
+# Default prediction
+# predictions <- predict(lda_model, subtest)$class
+
+# Evaluate the error
+true_responses <- as.list(subtest$Status)
+error <- mean(predictions != true_responses)
+error
+```
+
+# Quadratic Discriminant Analysis
+
+```{R}
+# Train a QDA model
+qda_model <- qda(Status ~ ., data = subtrain)
+
+# Predict the response on the test dataset using a custom probability cutoff
+p_1_cutoff <- 0.5
+posterior_p_1 <- predict(qda_model, subtest)$posterior[,2]
+predictions <- if_else(posterior_p_1 > p_1_cutoff, 1, 0)
+
+# Default prediction
+# predictions <- predict(qda_model, subtest)$class
+
+# Evaluate the error
+true_responses <- as.list(subtest$Status)
+error <- mean(predictions != true_responses)
+error
+```
+
+# Quadratic Discriminant Analysis - Transformed Data
+
+## Interaction Terms
+
+```{R}
+set.seed(1)
+
+# Generate interaction terms
+pairwise_interactions <- Status ~ .^2
+train_data_interact <- model.matrix(pairwise_interactions, data = train_data)
+train_data_interact <- train_data_interact[,-1]
+
+# Add "Status" variable to new matrix
+train_data_interact <- cbind(train_data_interact, train_data$Status)
+colnames(train_data_interact)[ncol(train_data_interact)] <- "Status"
+
+# Break into subtrain and subtest sets
+subtrain_size <- floor(0.8 * nrow(train_data_interact))
+subtrain_indexes <- sample(x = 1:nrow(train_data_interact), size = subtrain_size)
+
+subtrain <- as.data.frame(train_data_interact[subtrain_indexes,])
+subtest <- as.data.frame(train_data_interact[-subtrain_indexes,])
+
+rm(subtrain_size, subtrain_indexes)
+```
+
+```{R}
+# Train a QDA model
+qda_model <- qda(Status ~ ., data = subtrain)
+
+# Predict the response on the test dataset using a custom probability cutoff
+p_1_cutoff <- 0.5
+posterior_p_1 <- predict(qda_model, subtest)$posterior[,2]
+predictions <- if_else(posterior_p_1 > p_1_cutoff, 1, 0)
+
+# Default prediction
+# predictions <- predict(qda_model, subtest)$class
+
+# Evaluate the error
+true_responses <- as.list(subtest$Status)
+error <- mean(predictions != true_responses)
+error
+```
