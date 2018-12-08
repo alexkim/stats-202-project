@@ -33,7 +33,7 @@ train_data$Status <- as.factor(if_else(train_data$Status == 1, 1, -1))
 ```{R}
 set.seed(1)
 
-subtrain_size <- floor(0.8 * nrow(train_data))
+subtrain_size <- floor(0.5 * nrow(train_data))
 subtrain_indexes <- sample(x = 1:nrow(train_data), size = subtrain_size)
 
 subtrain <- train_data[subtrain_indexes,]
@@ -47,25 +47,51 @@ rm(subtrain_size, subtrain_indexes)
 # Radial SVM
 
 ```{R}
-cost_range <- c(0.001, 0.01, 0.1, 1, 5, 10, 100)
-gamma_range <- c(0.1, 0.5, 1, 2, 3, 4, 10)
+set.seed(1)
 
-radial_tune_output <- tune(svm, Status ~ ., data = subtrain, kernel = "radial", gamma = gamma_range, ranges = list(cost = cost_range))
+cost_range <- c(0.001, 0.01, 0.1, 1, 5, 10, 50, 100)
+gamma_range <- c(0.01, 0.1, 0.5, 1, 2, 3)
+
+# Model fitting
+radial_tune_output <- tune(svm, Status ~ ., data = subtrain, kernel = "radial", ranges = list(cost = cost_range, gamma = gamma_range))
 best_radial_svm <- radial_tune_output$best.model
+
+# Prediction
 predictions <- predict(best_radial_svm, subtest)
 
+# Results
+best_radial_svm
 mean(predictions != subtest$Status)
+```
+
+## Kaggle Submission
+
+```{R}
+set.seed(1)
+
+cost_range <- c(0.001, 0.01, 0.1, 1, 1.5, 2, 3)
+gamma_range <- c(0.01, 0.05, 0.1, 0.25, 0.5, 1)
+
+# Train SVM
+radial_tune_output <- tune(svm, Status ~ ., data = train_data, kernel = "radial", ranges = list(cost = cost_range, gamma = gamma_range))
+best_radial_svm <- radial_tune_output$best.model
+
+radial_tune_output
+
+# Prediction
+predictions <- predict(best_radial_svm, test_data)
+
+# Generate file for Kaggle
+predictions <- if_else(predictions == 1, TRUE, FALSE)
+kaggle_submission <- tibble(Id = test_ids, Category = predictions)
+write_csv(kaggle_submission, "data/submission.csv")
 ```
 
 # Polynomial SVM
 
 ```{R}
-cost_range <- c(0.001, 0.01, 0.1, 1, 5, 10, 100)
-gamma_range <- c(0.1, 0.5, 1, 2, 3, 4, 10)
-
-poly_tune_output <- tune(svm, Status ~ ., data = subtrain, kernel = "polynomial", gamma = gamma_range, ranges = list(cost = cost_range))
-best_poly_svm <- polynomial_tune_output$best.model
-predictions <- predict(best_poly_svm, subtest)
+poly_svm <- svm(Status ~ ., data = subtrain, kernel = "polynomial", cost = 1, gamma = 1)
+predictions <- predict(poly_svm, subtest)
 
 mean(predictions != subtest$Status)
 ```
